@@ -1,0 +1,198 @@
+DROP DATABASE IF EXISTS magazin2;
+CREATE DATABASE magazin2 CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE magazin2;
+
+CREATE TABLE admin (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  username   VARCHAR(50)  NOT NULL UNIQUE,
+  email      VARCHAR(100) NOT NULL UNIQUE,
+  password   VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE users (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  username        VARCHAR(50)  NOT NULL UNIQUE,
+  email           VARCHAR(100) NOT NULL UNIQUE,
+  password        VARCHAR(255) NOT NULL,
+  full_name       VARCHAR(100),
+  phone           VARCHAR(20),
+  account_type    ENUM('b2c','b2b') NOT NULL DEFAULT 'b2c',
+  status          ENUM('active','pending','blocked') NOT NULL DEFAULT 'active',
+  birth_date      DATE NULL,
+  age_verified    TINYINT(1) NOT NULL DEFAULT 0,
+  age_verified_at DATETIME NULL,
+  created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE categories (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  name             VARCHAR(100) NOT NULL UNIQUE,
+  description      VARCHAR(255),
+  image            VARCHAR(255),
+  risk_category    ENUM('F1','F2','F3','F4','T1','T2','P1','P2','NONE') NOT NULL DEFAULT 'NONE',
+  default_audience ENUM('b2c','b2b','admin_only') NOT NULL DEFAULT 'b2c',
+  min_age          TINYINT NOT NULL DEFAULT 18
+) ENGINE=InnoDB;
+
+CREATE TABLE products (
+  id                     INT AUTO_INCREMENT PRIMARY KEY,
+  category_id            INT NOT NULL,
+  sku                    VARCHAR(30) NOT NULL UNIQUE,
+  name                   VARCHAR(150) NOT NULL,
+  description            TEXT,
+  risk_category          ENUM('F1','F2','F3','F4','T1','T2','P1','P2','NONE') NOT NULL DEFAULT 'F1',
+  audience               ENUM('b2c','b2b','admin_only') NOT NULL DEFAULT 'b2c',
+  min_age                TINYINT NOT NULL DEFAULT 18,
+  requires_authorization TINYINT(1) NOT NULL DEFAULT 0,
+  price                  DECIMAL(10,2) NOT NULL,
+  stock                  INT NOT NULL DEFAULT 0,
+  image                  VARCHAR(255),
+  active                 TINYINT(1) NOT NULL DEFAULT 1,
+  created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES categories(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE product_images (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  product_id INT NOT NULL,
+  path       VARCHAR(255) NOT NULL,
+  alt        VARCHAR(150),
+  sort_order INT NOT NULL DEFAULT 0,
+  is_cover   TINYINT(1) NOT NULL DEFAULT 0,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE tbl_cart (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  user_id    INT NOT NULL,
+  product_id INT NOT NULL,
+  quantity   INT NOT NULL DEFAULT 1,
+  added_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_user_product (user_id, product_id),
+  FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
+CREATE TABLE addresses (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT NOT NULL,
+  label       VARCHAR(50),
+  line1       VARCHAR(200) NOT NULL,
+  city        VARCHAR(100) NOT NULL,
+  county      VARCHAR(100) NOT NULL,
+  postal_code VARCHAR(10),
+  country     VARCHAR(2) NOT NULL DEFAULT 'RO',
+  is_default  TINYINT(1) NOT NULL DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE companies (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  user_id       INT NOT NULL,
+  name          VARCHAR(150) NOT NULL,
+  cui           VARCHAR(20)  NOT NULL UNIQUE,
+  reg_com       VARCHAR(30),
+  contact_email VARCHAR(100),
+  verified      TINYINT(1) NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE company_documents (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  company_id  INT NOT NULL,
+  doc_type    VARCHAR(50) NOT NULL,
+  file_name   VARCHAR(255) NOT NULL,
+  expires_at  DATE NULL,
+  status      ENUM('pending','approved','rejected','expired') NOT NULL DEFAULT 'pending',
+  reviewed_by INT NULL,
+  reviewed_at DATETIME NULL,
+  notes       VARCHAR(255),
+  FOREIGN KEY (company_id)  REFERENCES companies(id) ON DELETE CASCADE,
+  FOREIGN KEY (reviewed_by) REFERENCES admin(id)     ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE orders (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  order_no            VARCHAR(30) NOT NULL UNIQUE,
+  user_id             INT NOT NULL,
+  company_id          INT NULL,
+  status              ENUM('draft','pending_review','confirmed','paid','shipped','delivered','cancelled','rejected')
+                      NOT NULL DEFAULT 'pending_review',
+  subtotal            DECIMAL(10,2) NOT NULL,
+  shipping_cost       DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total               DECIMAL(10,2) NOT NULL,
+  shipping_address_id INT NULL,
+  billing_address_id  INT NULL,
+  notes               VARCHAR(255),
+  created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id)             REFERENCES users(id),
+  FOREIGN KEY (company_id)          REFERENCES companies(id) ON DELETE SET NULL,
+  FOREIGN KEY (shipping_address_id) REFERENCES addresses(id) ON DELETE SET NULL,
+  FOREIGN KEY (billing_address_id)  REFERENCES addresses(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE order_items (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  order_id      INT NOT NULL,
+  product_id    INT NOT NULL,
+  product_name  VARCHAR(150) NOT NULL,
+  risk_category ENUM('F1','F2','F3','F4','T1','T2','P1','P2','NONE') NOT NULL,
+  unit_price    DECIMAL(10,2) NOT NULL,
+  quantity      INT NOT NULL,
+  FOREIGN KEY (order_id)   REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE order_compliance (
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  order_id          INT NOT NULL UNIQUE,
+  age_verified      TINYINT(1) NOT NULL,
+  age_verified_at   DATETIME NULL,
+  company_verified  TINYINT(1) NOT NULL DEFAULT 0,
+  max_risk_category ENUM('F1','F2','F3','F4','T1','T2','P1','P2','NONE') NOT NULL,
+  approved_by       INT NULL,
+  approved_at       DATETIME NULL,
+  rejection_reason  VARCHAR(255),
+  FOREIGN KEY (order_id)    REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (approved_by) REFERENCES admin(id)  ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE payments (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  order_id     INT NOT NULL,
+  provider     VARCHAR(30) NOT NULL DEFAULT 'mock',
+  provider_ref VARCHAR(60),
+  status       ENUM('initiated','authorized','captured','failed','refunded') NOT NULL DEFAULT 'initiated',
+  amount       DECIMAL(10,2) NOT NULL,
+  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE shipments (
+  id                       INT AUTO_INCREMENT PRIMARY KEY,
+  order_id                 INT NOT NULL,
+  carrier                  VARCHAR(50) NOT NULL DEFAULT 'mock',
+  tracking_no              VARCHAR(50),
+  status                   ENUM('pending','in_transit','delivered','returned') NOT NULL DEFAULT 'pending',
+  requires_adult_signature TINYINT(1) NOT NULL DEFAULT 1,
+  shipped_at               DATETIME NULL,
+  delivered_at             DATETIME NULL,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+INSERT INTO categories (name, description, image, risk_category, default_audience) VALUES
+ ('F1 - Risc scăzut', 'Demo, risc scăzut',        'f1.jpg',  'F1',   'b2c'),
+ ('F2 - Uz exterior', 'Demo, uz exterior',        'f2.jpg',  'F2',   'b2b'),
+ ('T1 - Scenă',       'Demo, efecte de scenă',    't1.jpg',  'T1',   'b2b'),
+ ('Accesorii',        'Accesorii nepirotehnice',  'acc.jpg', 'NONE', 'b2c');
+
+INSERT INTO products (category_id, sku, name, description, risk_category, audience, price, stock, image) VALUES
+ (1,'F1-001','Set steluțe demo',     'Produs fictiv, proiect didactic', 'F1',  'b2c', 19.99,  50, 'f1-001.jpg'),
+ (1,'F1-002','Fântână mică demo',    'Produs fictiv, proiect didactic', 'F1',  'b2c', 24.50,  30, 'f1-002.jpg'),
+ (2,'F2-001','Baterie mică demo',    'Produs fictiv, proiect didactic', 'F2',  'b2b', 89.00,  20, 'f2-001.jpg'),
+ (3,'T1-001','Efect scenă demo',     'Produs fictiv, proiect didactic', 'T1',  'b2b', 59.90,  15, 't1-001.jpg'),
+ (4,'ACC-001','Suport stabilizator', 'Accesoriu nepirotehnic',          'NONE','b2c', 14.00, 100, 'acc-001.jpg');
