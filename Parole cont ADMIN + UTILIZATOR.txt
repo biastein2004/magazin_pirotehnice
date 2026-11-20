@@ -1,0 +1,14 @@
+Admin
+
+Username: admin
+Email: admin@test.ro
+Parolă: Test1234
+
+
+
+
+Utilizator (client)
+
+Username: client1
+Email: client1@test.ro
+Parolă: Test1234
